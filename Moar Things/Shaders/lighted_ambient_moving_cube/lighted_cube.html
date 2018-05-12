@@ -1,0 +1,291 @@
+<!doctype html>
+<html>
+<head>
+    <title>Lighted + Ambient Light (Animated) Cube</title>
+    <style>
+        body {
+            background-color: grey;
+        }
+
+        canvas {
+            background-color: white;
+        }
+    </style>
+    <script src="gl-matrix-min.js"></script>
+    <script id="shader-vs" type="x-shader/x-vertex">
+        attribute vec3 aVertexPosition;
+	    attribute vec3 aVertexColor;  // Surface base color
+        attribute vec4 aVertexNormal; // Normal ==> Surface orientation
+        
+        uniform vec3 uLightColor;
+        uniform vec3 uLightDirection; // Light direction (in the world coordinate, normalized)
+        uniform mat4 uNMatrix;
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+        uniform vec3 uAmbientLight;   // Color of an ambient light
+        
+        varying highp vec4 vColor;
+        void main(void) {
+             gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+             // Make the length of the normal 1.0
+             vec4 normal = uNMatrix * aVertexNormal;
+             // Dot product of the light direction and the orientation of a surface (the normal)
+             float nDotL = max(dot(uLightDirection, normalize(normal.xyz)), 0.0);
+             // Calculate the color due to diffuse reflection + ambient light
+             vec3 ambient = uAmbientLight * aVertexColor.rgb;
+             vec3 diffuse = uLightColor * aVertexColor.rgb * nDotL;
+	         vColor = vec4(diffuse + ambient, 1.0);
+        }
+    </script>
+    <script id="shader-fs" type="x-shader/x-fragment">
+        precision mediump float;
+	    varying highp vec4 vColor;
+        void main(void) {
+            gl_FragColor = vColor;
+        }
+    </script>
+    <script>
+        var gl = null,
+            canvas = null,
+            glProgram = null,
+            fragmentShader = null,
+            vertexShader = null;
+
+        var vertexPositionAttribute = null,
+            vertexColorAttribute = null,
+            vertexNormalAttribute = null;
+
+        var verticesBuffer = null,
+            colorsBuffer = null,
+            normalsBuffer = null,
+            indicesBuffer = null;
+
+	    var mvMatrix = mat4.create();
+        var mvMatrixUniform = null;
+        
+        var pMatrix = mat4.create();
+        var pMatrixUniform = null;
+        
+        var nMatrix = mat4.create();
+        var nMatrixUniform = null;
+        
+        var lightDirectionUniform = null;
+        var ambientLightUniform = null;
+        var lightColorUniform = null;
+
+
+        var angle = 0.0;        
+       
+        function initWebGL() {
+            canvas = document.getElementById("my-canvas");
+            try {
+                gl = canvas.getContext("webgl") ||
+                     canvas.getContext("experimental-webgl");
+            } catch (e) {
+            }
+            if (gl) {
+                initShaders();
+                var n = setupBuffers();
+                getUniforms();
+                drawScene(n);
+                (function animLoop() {
+                    setupWebGL();
+                    drawScene(n);
+                    requestAnimationFrame(animLoop, canvas);
+                })() ;
+            } else {
+                alert("Error: Your browser does not appear to support WebGL.");
+            }
+        }
+        
+        function setupWebGL() {
+            gl.enable(gl.DEPTH_TEST);
+            gl.depthFunc(gl.LEQUAL);
+            
+            //set the clear color to a shade of green
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            
+
+	        gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        
+        function initShaders() {
+            //get shader source
+            var fs_source = document.getElementById('shader-fs').innerHTML,
+             vs_source = document.getElementById('shader-vs').innerHTML;
+            //compile shaders
+            vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+            fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+            //create program
+            glProgram = gl.createProgram();
+            //attach and link shaders to the program
+            gl.attachShader(glProgram, vertexShader);
+            gl.attachShader(glProgram, fragmentShader);
+            gl.linkProgram(glProgram);
+            if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                alert("Unable to initialize the shader program.");
+            }
+            //use program
+            gl.useProgram(glProgram);
+        }
+        
+        function makeShader(src, type) {
+            //compile the vertex shader
+            var shader = gl.createShader(type);
+            gl.shaderSource(shader, src);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+            }
+            return shader;
+        }
+        
+        function setupBuffers() {
+          // Create a cube
+          //    v6----- v5
+          //   /|      /|
+          //  v1------v0|
+          //  | |     | |
+          //  | |v7---|-|v4
+          //  |/      |/
+          //  v2------v3
+          var vertices = new Float32Array([   // Coordinates
+             1.0, 1.0, 1.0,  -1.0, 1.0, 1.0,  -1.0,-1.0, 1.0,   1.0,-1.0, 1.0, // v0-v1-v2-v3 front
+             1.0, 1.0, 1.0,   1.0,-1.0, 1.0,   1.0,-1.0,-1.0,   1.0, 1.0,-1.0, // v0-v3-v4-v5 right
+             1.0, 1.0, 1.0,   1.0, 1.0,-1.0,  -1.0, 1.0,-1.0,  -1.0, 1.0, 1.0, // v0-v5-v6-v1 up
+            -1.0, 1.0, 1.0,  -1.0, 1.0,-1.0,  -1.0,-1.0,-1.0,  -1.0,-1.0, 1.0, // v1-v6-v7-v2 left
+            -1.0,-1.0,-1.0,   1.0,-1.0,-1.0,   1.0,-1.0, 1.0,  -1.0,-1.0, 1.0, // v7-v4-v3-v2 down
+             1.0,-1.0,-1.0,  -1.0,-1.0,-1.0,  -1.0, 1.0,-1.0,   1.0, 1.0,-1.0  // v4-v7-v6-v5 back
+          ]);
+
+
+          var colors = new Float32Array([    // Colors
+            1, 0, 0,   1, 0, 0,   1, 0, 0,  1, 0, 0,     // v0-v1-v2-v3 front
+            1, 0, 0,   1, 0, 0,   1, 0, 0,  1, 0, 0,     // v0-v3-v4-v5 right
+            1, 0, 0,   1, 0, 0,   1, 0, 0,  1, 0, 0,     // v0-v5-v6-v1 up
+            1, 0, 0,   1, 0, 0,   1, 0, 0,  1, 0, 0,     // v1-v6-v7-v2 left
+            1, 0, 0,   1, 0, 0,   1, 0, 0,  1, 0, 0,     // v7-v4-v3-v2 down
+            1, 0, 0,   1, 0, 0,   1, 0, 0,  1, 0, 0　    // v4-v7-v6-v5 back
+         ]);
+
+
+          var normals = new Float32Array([    // Normal
+            0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,  // v0-v1-v2-v3 front
+            1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,  // v0-v3-v4-v5 right
+            0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,  // v0-v5-v6-v1 up
+           -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  // v1-v6-v7-v2 left
+            0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0,  // v7-v4-v3-v2 down
+            0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0   // v4-v7-v6-v5 back
+          ]);
+            
+            verticesBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+            gl.enableVertexAttribArray(vertexPositionAttribute);
+            gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+            colorsBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorsBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+
+            vertexColorAttribute = gl.getAttribLocation(glProgram, "aVertexColor");
+            gl.enableVertexAttribArray(vertexColorAttribute);
+            gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+            
+            normalsBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+
+            vertexNormalAttribute = gl.getAttribLocation(glProgram, "aVertexNormal");
+            gl.enableVertexAttribArray(vertexNormalAttribute);
+            gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
+
+          // Indices of the vertices
+          var indices = new Uint8Array([
+             0, 1, 2,   0, 2, 3,    // front
+             4, 5, 6,   4, 6, 7,    // right
+             8, 9,10,   8,10,11,    // up
+            12,13,14,  12,14,15,    // left
+            16,17,18,  16,18,19,    // down
+            20,21,22,  20,22,23     // back
+            ]);
+            indicesBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+            
+            return indices.length;
+        }
+
+        function drawScene(n) {
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            setUniforms();
+            
+            gl.drawElements(gl.TRIANGLES, n, gl.UNSIGNED_BYTE, 0);
+        }
+
+        function getUniforms() {
+            mvMatrixUniform = gl.getUniformLocation(glProgram, "uMVMatrix");
+            nMatrixUniform = gl.getUniformLocation(glProgram, "uNMatrix");
+            pMatrixUniform = gl.getUniformLocation(glProgram, "uPMatrix");
+            lightColorUniform = gl.getUniformLocation(glProgram, "uLightColor");
+            lightDirectionUniform = gl.getUniformLocation(glProgram, "uLightDirection");
+            ambientLightUniform = gl.getUniformLocation(glProgram, "uAmbientLight");
+
+            
+           if (!mvMatrixUniform || !nMatrixUniform || !pMatrixUniform || !lightDirectionUniform || !ambientLightUniform || !lightColorUniform) { 
+                console.log('Failed to get the storage location');
+                return;
+            }
+            
+            var ratio = canvas.width/canvas.height;
+            mat4.perspective(45, ratio, 0.1, 100, pMatrix);
+            gl.uniformMatrix4fv(pMatrixUniform, false, pMatrix);
+            
+            
+            // Set the color light
+            gl.uniform3f(lightColorUniform, 1.0, 1.0, 1.0);            
+            // Set the light direction (in the world coordinate)
+            var lightDirection = [0.5, 3.0, 4.0];
+            normalize(lightDirection);
+            gl.uniform3f(lightDirectionUniform, lightDirection[0], lightDirection[1], lightDirection[2]);
+            // Set the ambient light
+            gl.uniform3f(ambientLightUniform, 0.2, 0.2, 0.2);
+        }
+
+        function setUniforms() {
+            angle += 0.01;
+	        mat4.identity(mvMatrix);
+            mat4.translate(mvMatrix, [0.0, 0.0, -6.0]);
+            mat4.rotate(mvMatrix, angle, [0.0, 1.0, 0.5]);
+            gl.uniformMatrix4fv(mvMatrixUniform, false, mvMatrix);
+
+            nMatrix = mat4.inverse(mvMatrix);
+            mat4.transpose(nMatrix);
+            gl.uniformMatrix4fv(nMatrixUniform, false, nMatrix);
+        }
+        
+        function normalize(v) {
+            var c = v[0], d = v[1], e = v[2], g = Math.sqrt(c*c+d*d+e*e);
+            if(g){
+                if(g == 1)
+                return v;
+           } else {
+                v[0] = 0; v[1] = 0; v[2] = 0;
+                return v;
+           }
+           g = 1/g;
+           v[0] = c*g; v[1] = d*g; v[2] = e*g;
+           return v;
+};
+
+    </script>
+</head>
+<body onload="initWebGL()">
+    <canvas id="my-canvas" width="400" height="400">
+        Your browser does not support the HTML5 canvas element.
+    </canvas>
+</body>
+</html>

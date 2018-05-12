@@ -1,0 +1,625 @@
+//PONG BY PATRICIA DURAN CASTRO
+
+//Esta práctica consta de la parte básica y algunos extras añadidos
+//1.Añadir  más  elementos  al  escenario : Se añadieron columnas y un fondo
+//  para aportar mayor sensación de profundidad al escenario
+//2.Shadows: Se decidió añadir SpotLight de tal manera que el objeto
+//  que proyecta dicha luz es la pelota y se puede contemplar tanto en las
+//  paredes como en las columnas del programa.
+//3.Seguir  a  la  pelota  con  la  iluminación:Como bien se explicó
+//  anteriormente esta función ya está implementada.
+//4.Añadir texturas a los objetos: Tanto las paredes como el plano que soporta
+//  el programa contienen texturas y el fondo aplicado para dar profundidad también.
+//5.Extras adicionales
+  //5.1 Se añadieron distintos niveles para poder probar el programa.
+    //5.1.1 Demo Mode: es una versión sencilla en la que la pelota tiene velocidad reducida
+    //5.1.2 Casual Mode: version casual del juego tal y como especifica en la practica
+    //5.1.3 Infernal Mode: La rapidez de la pala del jugador esta mucho más limitada que
+    //                   la de la máquina.
+    //5.1.4 Stop Mode: La pala del enemigo deja de funcionar.
+    //* Es posible cambiar la dificultad en mitad del juego :).
+
+  //5.2 Se añadió música al programa.
+
+
+// GLOBAL VARIABLES
+
+// Set the scene size
+const WIDTH = 640;
+const HEIGHT = 360;
+
+var container;
+
+// Set some camera attributes
+const VIEW_ANGLE = 50;
+const ASPECT = WIDTH / HEIGHT;
+const NEAR = 0.1;
+const FAR = 10000;
+
+// Scene object variables
+var renderer, scene, camera, pointLight , spotLight;
+
+// Set up the sphere vars
+const RADIUS = 5;
+const SEGMENTS = 6;
+const RINGS = 6;
+
+var sphere;
+var angle = 0.0;
+
+//Set up the variable plane
+const FIELD_WIDTH= 400,
+      FIELD_HEIGTH= 200;
+const PLANE_WIDTH = FIELD_WIDTH,
+      PLANE_HEIGTH = FIELD_HEIGTH,
+      PLANE_QUALITY= 10;
+
+var fiel_width_colision = FIELD_WIDTH;
+var fiel_height_colision = FIELD_HEIGTH;
+
+//Set up the variable cube
+const PADDLE_WIDTH= 10,
+      PADDLE_HEIGTH = 30,
+      PADDLE_DEPTH = 10,
+      PADDLE_QUALITY = 1;
+
+var paddlewith = PADDLE_WIDTH,
+    paddleheigth = PADDLE_HEIGTH;
+
+
+var playerPaddleDirY = 0,
+    cpuPaddleDirY = 0,
+    paddleSpeed = 3;
+
+var playerPaddle,
+    cpuPaddle;
+
+var ballDirX = 1,
+    ballDirY = 1,
+    ballSpeed = 2;
+
+var difficulty = 0.0;
+
+var score1 = 0,
+    score2 = 0,
+    maxScore = 3;
+
+var StartGameVar = 0;
+
+// GAME FUNCTIONS
+function setup()
+{
+  createScene();
+  addPlane();
+  addSphere();
+  addPaddle();
+  addColum();
+  addwalls();
+  addfondo();
+  addLight();
+  addShadow();
+  addTexture();
+  music();
+  draw();
+}
+
+
+function createScene()
+{
+  // Set up all the 3D objects in the scene
+	// Get the DOM element to attach to
+    container = document.getElementById("gameCanvas");
+
+    // Create a WebGL renderer, camera and a scene
+    renderer = new THREE.WebGLRenderer();
+    camera =
+        new THREE.PerspectiveCamera(
+            VIEW_ANGLE,
+            ASPECT,
+            NEAR,
+            FAR
+        );
+
+    scene = new THREE.Scene();
+
+    // Add the camera to the scene
+    scene.add(camera);
+
+    // Start the renderer
+    renderer.setSize(WIDTH, HEIGHT);
+
+    // Attach the renderer-supplied DOM element.
+    container.appendChild(renderer.domElement);
+    //container.appendChild
+}
+
+function addPlane(){
+  var geometry = new THREE.PlaneGeometry(PLANE_WIDTH, PLANE_HEIGTH, PLANE_QUALITY);
+  var material = new THREE.MeshLambertMaterial(
+      {
+        color: 0xffffff, side: THREE.DoubleSide
+      } );
+  var plane = new THREE.Mesh( geometry, material );
+
+  plane.position.z = -300;
+  scene.add(plane);
+}
+
+
+function addSphere()
+{
+    var geometry = new THREE.SphereGeometry(
+        RADIUS,
+        SEGMENTS,
+        RINGS);
+    var material = new THREE.MeshLambertMaterial(
+        {
+          color: 0xac7339
+        });
+    // Create a new mesh with sphere geometry
+    sphere = new THREE.Mesh(geometry, material);
+
+    // Move the Sphere back in Z so we can see it
+    sphere.position.x = ballDirX;
+    sphere.position.y = ballDirY;
+    sphere.position.z = -296;
+
+    // Finally, add the sphere to the scene
+    scene.add(sphere);
+}
+
+function addPaddle()
+{
+  var geometry = new THREE.BoxGeometry(PADDLE_WIDTH,PADDLE_HEIGTH,PADDLE_DEPTH,PADDLE_QUALITY);
+  var geometry2 = new THREE.BoxGeometry(PADDLE_WIDTH,PADDLE_HEIGTH,PADDLE_DEPTH,PADDLE_QUALITY);
+
+  var materialplayer = new THREE.MeshLambertMaterial(
+    {
+      color: 0x2d2db9
+    } );
+  var material_CPU = new THREE.MeshLambertMaterial(
+    {
+      color: 0xadadeb
+    } );
+
+  playerPaddle = new THREE.Mesh( geometry, materialplayer );
+  cpuPaddle = new THREE.Mesh( geometry2, material_CPU );
+
+  playerPaddle.position.x = -180;
+  playerPaddle.position.y = playerPaddleDirY;
+  playerPaddle.position.z = -300;
+
+
+  cpuPaddle.position.x = 180;
+  cpuPaddle.position.y = cpuPaddleDirY;
+  cpuPaddle.position.z = -300;
+  scene.add( playerPaddle );
+  scene.add(cpuPaddle);
+}
+
+function addColum()
+{
+  var geometry = new THREE.CylinderBufferGeometry( 5, 5, 40, 32,40 );
+  var material = new THREE.MeshLambertMaterial(
+    {
+      color: 0xe6e6e6
+    } );
+  var cylinder = new THREE.Mesh(geometry, material);
+  var cylinder_2 = new THREE.Mesh(geometry, material);
+  var cylinder_3 = new THREE.Mesh(geometry, material);
+  var cylinder_4 = new THREE.Mesh(geometry, material);
+
+  cylinder.position.x = -200;
+  cylinder.position.y = 100;
+  cylinder.position.z = -300;
+  cylinder.rotation.x = 90 * Math.PI/180;
+  scene.add( cylinder );
+
+  cylinder_2.position.x = 200;
+  cylinder_2.position.y = 100;
+  cylinder_2.position.z = -300;
+  cylinder_2.rotation.x = 90 * Math.PI/180;
+  scene.add( cylinder_2 );
+
+  cylinder_3.position.x = 200;
+  cylinder_3.position.y = -100;
+  cylinder_3.position.z = -300;
+  cylinder_3.rotation.x = 90 * Math.PI/180;
+  scene.add( cylinder_3 );
+
+  cylinder_4.position.x = -200;
+  cylinder_4.position.y = -100;
+  cylinder_4.position.z = -300;
+  cylinder_4.rotation.x = 90 * Math.PI/180;
+  scene.add( cylinder_4 );
+
+};
+
+function addwalls()
+{
+  var loader = new THREE.CubeTextureLoader();
+  loader.setPath('./js/textures/')
+  var texture_plane = loader.load([
+    'moon.png','moon.png',
+    'moon.png','moon.png',
+    'moon.png','moon.png'])
+
+  var geometry = new THREE.BoxGeometry(400,15,PADDLE_DEPTH,PADDLE_QUALITY);
+  var materialplayer = new THREE.MeshLambertMaterial(
+    {
+      color: 0xe6e6e6, side: THREE.DoubleSide, envMap: texture_plane
+    } );
+
+  Wall_1 = new THREE.Mesh( geometry, materialplayer );
+  Wall_2 =  new THREE.Mesh( geometry, materialplayer );
+
+  Wall_1.position.x = 0;
+  Wall_1.position.y = 100
+  Wall_1.position.z = -300;
+  Wall_1.rotation.x = 90 * Math.PI/180;
+  Wall_1.receiveShadow = true;
+
+  Wall_2.position.x = 0;
+  Wall_2.position.y = -100
+  Wall_2.position.z = -300;
+  Wall_2.rotation.x = 90 * Math.PI/180;
+  Wall_2.receiveShadow = true;
+
+  scene.add(Wall_1);
+  scene.add(Wall_2);
+}
+
+function addfondo(){
+  var loader = new THREE.CubeTextureLoader();
+  loader.setPath('./js/textures/')
+  var texture_plane = loader.load([
+    'Fondo.png','Fondo.png',
+    'Fondo.png','Fondo.png',
+    'Fondo.png','Fondo.png'])
+
+  var geometry = new THREE.BoxGeometry(100,450,640,PADDLE_QUALITY);
+  var materialplayer = new THREE.MeshLambertMaterial(
+    {
+      color: 0xe6e6e6, side: THREE.DoubleSide, envMap: texture_plane
+    } );
+
+  Fondo = new THREE.Mesh( geometry, materialplayer );
+
+  Fondo.position.x = 250;
+  Fondo.position.y = 0;
+  Fondo.position.z = -300;
+  Fondo.rotation.x = 90 * Math.PI/180;
+
+  scene.add(Fondo);
+
+};
+
+function addLight()
+{
+    // Create a point light
+    pointLight =
+      new THREE.PointLight(0xFFFFFF, 1.5);
+
+    // Set its position 10,50,130
+    pointLight.position.x = 10;
+    pointLight.position.y = 50;
+    pointLight.position.z = 130;
+    //pointLight.intensity = 0.8;
+    // Add to the scene
+    scene.add(pointLight);
+}
+
+function addShadow(){
+
+  spotLight = new THREE.SpotLight( 0xffffff);
+  spotLight.position.set( sphere.position.x, sphere.position.y, sphere.position.z );
+  spotLight.intensity = 1.0;
+  spotLight.castShadow = true;
+  scene.add( spotLight );
+
+  spotLight.target = sphere;
+  renderer.shadowMap.enabled = true;
+}
+
+//Aprendiendo a Bindear la textura
+function addTexture(){
+  var loader = new THREE.CubeTextureLoader();
+  loader.setPath('./js/textures/')
+  var texture_plane = loader.load([
+    'moon.png','moon.png',
+    'moon.png','moon.png',
+    'moon.png','moon.png'])
+
+  var geometry = new THREE.PlaneGeometry(PLANE_WIDTH, PLANE_HEIGTH, PLANE_QUALITY);
+  var material = new THREE.MeshLambertMaterial(
+      {
+        color: 0xffffff, side: THREE.DoubleSide, envMap: texture_plane
+      } );
+  var plane = new THREE.Mesh( geometry, material );
+
+  plane.position.z = -300;
+  scene.add(plane);
+}
+
+
+function MovementPaddle(){
+  if (Key.isDown(Key.A))
+  {
+    if (playerPaddle.position.y < fiel_height_colision * 0.42){
+      playerPaddleDirY = paddleSpeed * 0.8;
+    }else{
+      playerPaddleDirY = 0.0;
+    }
+// code to move paddle left
+  }else if (Key.isDown(Key.D)){
+    if (playerPaddle.position.y > -fiel_height_colision * 0.42){
+      playerPaddleDirY = - paddleSpeed * 0.8;
+    }else{
+     playerPaddleDirY = 0.0;
+    }
+  }else{
+     playerPaddleDirY = 0.0;
+  }
+  playerPaddle.position.y += playerPaddleDirY;
+};
+
+
+
+function MovementSphere(){
+  //Tratamiento de Colisiones
+  if (sphere.position.y > fiel_height_colision * 0.45){
+    //ballDirX = ballDirX
+    ballDirY = -ballDirY;
+  }else if (sphere.position.y < -fiel_height_colision * 0.45){
+    //ballDirX = ballDirX;
+    ballDirY = -ballDirY;
+  }
+}
+
+function MovementEnemy(){
+  cpuPaddleDirY = (sphere.position.y - cpuPaddle.position.y)*difficulty;
+    if (cpuPaddleDirY <= paddleSpeed){
+      cpuPaddle.position.y += cpuPaddleDirY;
+    }else{
+      if (cpuPaddleDirY > paddleSpeed)
+      {
+          cpuPaddle.position.y += paddleSpeed*1.65;
+      }
+    }
+}
+
+
+function ColisionPaddle(){
+  if (sphere.position.x <= playerPaddle.position.x + paddlewith &&
+      sphere.position.x >= playerPaddle.position.x )
+      {
+        if (sphere.position.y <= playerPaddle.position.y + paddleheigth * 0.8  &&
+        sphere.position.y >= playerPaddle.position.y - paddleheigth * 0.8 )
+        {
+          if (ballDirX > 0 )
+          {
+            ballDirX = - ballDirX * 1.2;
+            //Efecto de la pelota in testing2
+            ballDirY -= ballDirX * 1.2;
+            //ballSpeed =  ballSpeed * 2;
+          }
+        }
+      }
+
+  else if (sphere.position.x <= cpuPaddle.position.x + paddlewith &&
+      sphere.position.x >= cpuPaddle.position.x )
+      {
+        if (sphere.position.y <= cpuPaddle.position.y + paddleheigth * 0.8 &&
+            sphere.position.y >= cpuPaddle.position.y - paddleheigth * 0.8)
+            {
+              if (ballDirX < 0 )
+              {
+                ballDirX = -ballDirX *1.2;
+                ballDirY -= ballDirX  * 1.2;
+
+                //ballSpeed =  ballSpeed + 0.2;
+                //Efecto de la pelota in testing
+                //ballDirY = ballDirX;
+              }
+            }
+       }
+//Control ball speed
+  if (ballDirY > ballSpeed *2)
+  {
+    ballDirY = ballSpeed *2 ;
+  }else if(ballDirY < -ballSpeed *2)
+  {
+    ballDirY = -ballSpeed *2 ;
+  }
+
+  if (ballDirX > ballSpeed *2)
+  {
+    ballDirX = ballSpeed *2 ;
+  }else if(ballDirX < -ballSpeed *2)
+  {
+    ballDirX = -ballSpeed *2 ;
+  }
+}
+
+
+
+
+function score()
+{
+  //field colision * 0.45
+  if(sphere.position.x <- fiel_width_colision)
+  {
+    sphere.position.x = 0.0;
+    sphere.position.y = 0.0;
+
+    sphere.position.x += -ballDirX;
+    sphere.position.y += ballDirY;
+
+    if (ballDirX = ballSpeed * 2){
+      ballDirX = 1.0;
+      ballDirY = 1.0;
+
+    }else if(-ballDirX < ballSpeed *2) {
+      ballDirX = 1.0;
+      ballDirY = 1.0;
+    }
+
+    if (score2 < maxScore-1)
+    {
+      score2 = score2 + 1;
+      document.getElementById("scores").innerHTML = score1 +"-"+ score2;
+    }else{
+      document.getElementById("winnerBoard").innerHTML = "First to " + maxScore + " wins!";
+      document.getElementById("scores").innerHTML = "CPU WINS";
+      cancelAnimationFrame(Identificador);
+      //stopAnimationFrame();
+    }
+
+  }else if(sphere.position.x > fiel_width_colision)
+    {
+      sphere.position.x = 0.0;
+      sphere.position.y = 0.0;
+
+      sphere.position.x += ballDirX;
+      sphere.position.y += ballDirY;
+
+      console.log(ballSpeed)
+
+      //ballDirX = ballDirX*(ballSpeed/4);
+      if (ballDirX = ballSpeed * 2){
+        ballDirX = -1.0;
+        ballDirY = 1.0 ;
+
+      }else if(-ballDirX < ballSpeed *2) {
+        ballDirX = -1.0;
+        ballDirY = 1.0;
+      }
+
+      if (score1 < maxScore-1)
+      {
+        score1 = score1 + 1;
+        document.getElementById("scores").innerHTML = score1 +"-"+ score2;
+      }else{
+        document.getElementById("winnerBoard").innerHTML = "First to " + maxScore + " wins!";
+        document.getElementById("scores").innerHTML = "Player WINS";
+        cancelAnimationFrame(Identificador);
+        //stopAnimationFrame();
+      }
+  //  sphere.position.x += ballDirX * ballSpeed;
+  //  sphere.position.y += ballDirY * ballSpeed;
+  }
+}
+
+
+function SelectDifficult(){
+  if (Key.isDown(Key.ONE)){
+    difficulty = 0.1;
+    StartGameVar = 1;
+    paddleSpeed = 3;
+    ballSpeed = 1.25;
+    //console.log(StartGameVar + "Ahora vale 1")
+  }else if (Key.isDown(Key.TWO)){
+    difficulty = 0.2;
+    StartGameVar = 2;
+    paddleSpeed = 3;
+    ballSpeed = 2;
+   //console.log(StartGameVar + "Ahora vale 2")
+ }else if(Key.isDown(Key.THREE)){
+   difficulty = 0.2;
+   StartGameVar = 3;
+   paddleSpeed = 1;
+   ballSpeed = 2;
+ }else if(Key.isDown(Key.FOUR)){
+    difficulty = 0.00;
+    StartGameVar = 4;
+    paddleSpeed = 3;
+    ballSpeed = 2;
+   //console.log(StartGameVar + "Ahora vale 3")
+ }
+};
+
+
+function StartGame(){
+  if(StartGameVar == 0){
+  SelectDifficult();
+
+  }else{
+    //Mirar si es X o y
+
+    if (ballDirY > ballSpeed *2)
+    {
+      ballDirY = ballSpeed *2 ;
+    }else if(ballDirY < -ballSpeed *2)
+    {
+      ballDirY = -ballSpeed *2 ;
+    }
+
+    if (ballDirX > ballSpeed *2)
+    {
+      ballDirX = ballSpeed *2 ;
+    }else if(ballDirX < -ballSpeed *2)
+    {
+      ballDirX = -ballSpeed *2 ;
+    }
+      sphere.position.x += -ballDirX * ballSpeed;
+      sphere.position.y += ballDirY * ballSpeed;
+      //Control ball speed
+  //  Identificador = requestAnimationFrame(draw);
+  }
+}
+
+function music(){
+  // instantiate a listener
+  var audioListener = new THREE.AudioListener();
+  // add the listener to the camera
+  camera.add( audioListener );
+  // instantiate audio object
+  var oceanAmbientSound = new THREE.Audio( audioListener );
+  // add the audio object to the scene
+  scene.add( oceanAmbientSound );
+  // instantiate a loader
+  var loader = new THREE.AudioLoader();
+  // load a resource
+  loader.load(
+	// resource URL
+	 './js/audio/music.mp3',
+	// onLoad callback
+	function ( audioBuffer ) {
+		// set the audio object buffer to the loaded object
+		oceanAmbientSound.setBuffer( audioBuffer );
+		// play the audio
+		oceanAmbientSound.play();
+	 },
+	// onProgress callback
+	function ( xhr ) {
+		console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+	},
+	// onError callback
+	function ( err ) {
+		console.log( 'An error happened' );
+	}
+);
+}
+
+
+function draw()
+{
+  //Establecer la posicion de la practica
+  camera.rotation.z = -90 * Math.PI/180;
+  camera.rotation.y = -60 * Math.PI/180;
+  camera.position.x = playerPaddle.position.x - 130;
+  camera.position.z = playerPaddle.position.z + 130;
+  //animate();
+  // Draw!
+  renderer.render(scene, camera);
+  // Schedule the next frame
+  StartGame();
+  Identificador = requestAnimationFrame(draw);
+  ColisionPaddle();
+  MovementSphere();
+  MovementPaddle();
+  SelectDifficult();
+  MovementEnemy();
+  score();
+
+}

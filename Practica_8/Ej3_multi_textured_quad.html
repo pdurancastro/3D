@@ -1,0 +1,219 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Multi Textured Quad</title>
+    <style>
+        body {
+            background-color: grey;
+        }
+
+        canvas {
+            background-color: white;
+        }
+    </style>
+    <script id="shader-vs" type="x-shader/x-vertex">
+        attribute vec4 aVertexPosition;
+        attribute vec2 aTexCoord;
+        varying   vec2 vTexCoord;
+        void main(void) {
+            gl_Position = aVertexPosition;
+            vTexCoord = aTexCoord;
+        }
+    </script>
+    <script id="shader-fs" type="x-shader/x-fragment">
+        precision highp float;
+        precision mediump float;
+        uniform sampler2D uSampler0;
+        uniform sampler2D uSampler1;
+        varying vec2 vTexCoord;
+        void main(void) {
+            vec4 color0 = texture2D(uSampler0, vTexCoord);
+            vec4 color1 = texture2D(uSampler1, vTexCoord);
+            //Multiplico el valor de cada vector y con esto me dara el color final
+            gl_FragColor = color0 + color1;
+        }
+    </script>
+    <script>
+        // python -m SimpleHTTPServer
+        // http://localhost:8000/multi_textured_quad.html
+        var gl = null,
+            canvas = null,
+            glProgram = null,
+            fragmentShader = null,
+            vertexShader = null;
+        var vertexPositionAttribute = null,
+            trianglesVerticeBuffer = null;
+        var vertexTextureAttribute = null;
+        var triangleVerticesTex = [];
+        var vertexTextureAttribute = null;
+        var fragmentSamplerUniform0 = null;
+        var fragmentSamplerUniform1 = null;
+        var textureUnit0 = false,
+            textureUnit1 = false;
+
+        function initWebGL() {
+            canvas = document.getElementById("my-canvas");
+            try {
+                gl = canvas.getContext("webgl") ||
+                canvas.getContext("experimental-webgl");
+            } catch (e) {
+            }
+            if (gl) {
+                setupWebGL();
+                initShaders();
+                n=setupBuffers();
+                // Set texture
+                if (!initTextures(n)) {
+                    console.log('Failed to intialize the texture.');
+                    return;
+                }
+            } else {
+                alert("Error: Your browser does not appear to support WebGL.");
+            }
+        }
+
+        function setupWebGL() {
+            //set the clear color to a shade of green
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+        }
+
+        function initShaders() {
+            //get shader source
+            var fs_source = document.getElementById('shader-fs').innerHTML,
+             vs_source = document.getElementById('shader-vs').innerHTML;
+            //compile shaders
+            vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+            fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+            //create program
+            glProgram = gl.createProgram();
+            //attach and link shaders to the program
+            gl.attachShader(glProgram, vertexShader);
+            gl.attachShader(glProgram, fragmentShader);
+            gl.linkProgram(glProgram);
+            if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                alert("Unable to initialize the shader program.");
+            }
+            //use program
+            gl.useProgram(glProgram);
+        }
+
+        function makeShader(src, type) {
+            //compile the vertex shader
+            var shader = gl.createShader(type);
+            gl.shaderSource(shader, src);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+            }
+            return shader;
+        }
+
+        function setupBuffers() {
+            triangleVerticesTex = new Float32Array([
+                //triangle Vertices, texture coordinate
+                    -0.5,  0.5,   0.0, 1.0,
+                    -0.5, -0.5,   0.0, 0.0,
+                     0.5,  0.5,   1.0, 1.0,
+                     0.5, -0.5,   1.0, 0.0,
+            ]);
+
+            var n = 4; // The number of vertices
+
+            // Create vertices buffer
+            trianglesVerticeBuffer = gl.createBuffer();
+            // Specify type of buffer
+            gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffer);
+            // Copy array of vertices into vertices buffer
+            gl.bufferData(gl.ARRAY_BUFFER, triangleVerticesTex, gl.STATIC_DRAW);
+
+            var FSIZE = triangleVerticesTex.BYTES_PER_ELEMENT;
+
+            vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+            gl.enableVertexAttribArray(vertexPositionAttribute);
+            gl.vertexAttribPointer(vertexPositionAttribute, 2, gl.FLOAT, false, FSIZE*4, 0);
+
+            vertexTextureAttribute = gl.getAttribLocation(glProgram, "aTexCoord");
+            gl.enableVertexAttribArray(vertexTextureAttribute);
+            gl.vertexAttribPointer(vertexTextureAttribute, 2, gl.FLOAT, false, FSIZE*4, FSIZE*2);
+
+            return n;
+        }
+
+        function initTextures(n) {
+            var texture0 = gl.createTexture();   // Create a texture object 0
+            var texture1 = gl.createTexture();   // Create a texture object 1
+
+            if (!texture0 || !texture1) {
+                console.log('Failed to create the textures objects');
+                return false;
+            }
+
+            // Get the storage location of uSampler0
+            fragmentSamplerUniform0 = gl.getUniformLocation(glProgram, 'uSampler0');
+            fragmentSamplerUniform1 = gl.getUniformLocation(glProgram, 'uSampler1');
+            if (!fragmentSamplerUniform0 || !fragmentSamplerUniform1) {
+                console.log('Failed to get the storage location of uSamplers');
+                return false;
+            }
+            var image0 = new Image();  // Create the image object 0
+            var image1 = new Image();  // Create the image object 1
+
+            if (!image0 || !image1) {
+                console.log('Failed to create the images objects');
+                return false;
+            }
+            // Register the event handler to be called on loading an image
+            image0.onload = function(){loadTexture(gl, n, texture0, fragmentSamplerUniform0, image0, 0);};
+            image1.onload = function(){loadTexture(gl, n, texture1, fragmentSamplerUniform1, image1, 1);};
+
+            // Tell the browser to load the images
+            image0.src = 'http://localhost:8000/sky.jpg';
+            image1.src = 'http://localhost:8000/circle.gif';
+            image0.setAttribute('crossorigin', 'anonymous');
+            image1.setAttribute('crossorigin', 'anonymous');
+            return true;
+        }
+
+        // Specify whether the texture unit is ready to use
+        function loadTexture(gl, n, texture, fragmentSamplerUniform, image, textureUnitNumber) {
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1); // Flip the image's y axis
+            // Make the texture unit active
+            if (textureUnitNumber == 0) {
+                gl.activeTexture(gl.TEXTURE0);
+                textureUnit0 = true;
+            }
+            else{
+                gl.activeTexture(gl.TEXTURE1);
+                textureUnit1 = true;
+            }
+
+            // Bind the texture object to the target
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+
+            // Set the texture parameters
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+            // Set the texture image
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+
+            // Set the texture unit number to the sampler
+            gl.uniform1i(fragmentSamplerUniform, textureUnitNumber);
+
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            //Comprobacion de las texturas
+            if (textureUnit0 && textureUnit1) {
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, n); // Draw a rectangle
+            }
+        }
+
+     </script>
+</head>
+<body onload="initWebGL()">
+    <canvas id="my-canvas" width="400" height="400">
+        Your browser does not support the HTML5 canvas element.
+    </canvas>
+</body>
+</html>
